@@ -36,6 +36,8 @@ db.exec(`
 `)
 
 export default {
+    // === USUARIOS ===
+    
     getUser(jid) {
         return db.prepare('SELECT * FROM users WHERE jid = ?').get(jid)
     },
@@ -59,7 +61,16 @@ export default {
         return stmt.run(amount, jid)
     },
 
-    // === NUEVOS MÉTODOS PARA CONFIG ===
+    isRegistered(jid) {
+        const user = db.prepare('SELECT jid FROM users WHERE jid = ?').get(jid)
+        return !!user
+    },
+
+    getAllUsers() {
+        return db.prepare('SELECT * FROM users').all()
+    },
+
+    // === CONFIG ===
     
     getConfig(key) {
         const row = db.prepare('SELECT value FROM config WHERE key = ?').get(key)
@@ -74,5 +85,24 @@ export default {
             DO UPDATE SET value = excluded.value
         `)
         return stmt.run(key, value)
+    },
+
+    // === FARMS ===
+    
+    getFarm(userJid) {
+        return db.prepare('SELECT * FROM farms WHERE user_jid = ?').get(userJid)
+    },
+
+    createFarm(userJid) {
+        const stmt = db.prepare('INSERT OR IGNORE INTO farms (user_jid) VALUES (?)')
+        return stmt.run(userJid)
+    },
+
+    updateFarm(userJid, data) {
+        const keys = Object.keys(data)
+        const values = Object.values(data)
+        const setClause = keys.map(k => `${k} = ?`).join(', ')
+        const stmt = db.prepare(`UPDATE farms SET ${setClause} WHERE user_jid = ?`)
+        return stmt.run(...values, userJid)
     }
 }
