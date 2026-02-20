@@ -17,8 +17,7 @@ export default {
         
         // Verificar argumento
         if (!args || args.length === 0) {
-            // Obtener moneda actual de la DB (o default)
-            const monedaActual = await database.getConfig('monedaNombre') || 'MelpCoins'
+            const monedaActual = database.getConfig('monedaNombre') || 'MelpCoins'
             return reply(`
 💰 *Moneda actual:* ${monedaActual}
 
@@ -40,7 +39,7 @@ export default {
         }
         
         // Guardar en database (persistente)
-        await database.setConfig('monedaNombre', nuevaMoneda)
+        database.setConfig('monedaNombre', nuevaMoneda)
         
         // Actualizar en runtime
         global.monedaNombre = nuevaMoneda
