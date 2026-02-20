@@ -1,4 +1,7 @@
-export default {
+// Moneda global (cambiable por owner)
+global.monedaNombre = 'MelpCoins'
+
+const config = {
     botName: 'MelpBotPro',
     version: '2.0.0',
     
@@ -32,3 +35,4 @@ export default {
     }
 }
 
+export default config
