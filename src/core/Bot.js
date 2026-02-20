@@ -3,6 +3,7 @@ import { Boom } from '@hapi/boom'
 import pino from 'pino'
 import chalk from 'chalk'
 import qrcode from 'qrcode-terminal'
+import readline from 'readline'
 import { readdirSync, statSync } from 'fs'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
@@ -10,6 +11,13 @@ import database from '../database/Database.js'
 import RentaManager from './RentaManager.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
+
+const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout
+})
+
+const question = (text) => new Promise((resolve) => rl.question(text, resolve))
 
 class Bot {
     constructor() {
@@ -28,9 +36,14 @@ class Bot {
             version,
             logger: pino({ level: 'silent' }),
             auth: state,
-            printQRInTerminal: true,
+            printQRInTerminal: false,
             browser: ['MelpPro', 'Chrome', '2.0.0']
         })
+
+        // Elegir método de conexión
+        if (!this.sock.authState.creds.registered) {
+            await this.chooseConnectionMethod()
+        }
 
         this.sock.ev.on('creds.update', saveCreds)
         this.sock.ev.on('connection.update', (update) => this.handleConnection(update))
@@ -41,17 +54,54 @@ class Bot {
         this.rentaManager = new RentaManager(this.sock)
     }
 
+    async chooseConnectionMethod() {
+        console.log(chalk.cyan.bold('\n╔═══════════════════════════════════════╗'))
+        console.log(chalk.cyan.bold('║     🔗 MÉTODO DE CONEXIÓN             ║'))
+        console.log(chalk.cyan.bold('╠═══════════════════════════════════════╣'))
+        console.log(chalk.cyan.bold('║  1. QR Code (escanear con WhatsApp)   ║'))
+        console.log(chalk.cyan.bold('║  2. Pairing Code (8 dígitos)          ║'))
+        console.log(chalk.cyan.bold('╚═══════════════════════════════════════╝\n'))
+
+        const opcion = await question(chalk.yellow('  Selecciona (1 o 2): '))
+
+        if (opcion === '2') {
+            // Pairing Code
+            const phoneNumber = await question(chalk.white('\n  📱 Número (ej: 573233266174): '))
+            
+            try {
+                const code = await this.sock.requestPairingCode(phoneNumber.trim())
+                console.log(chalk.green('\n  ✅ Tu código es: ') + chalk.white.bgBlack.bold(` ${code} `))
+                console.log(chalk.gray('\n  Abre WhatsApp → Dispositivos → Vincular → Ingresar código\n'))
+            } catch (err) {
+                console.log(chalk.red('\n  ❌ Error:', err.message))
+                console.log(chalk.yellow('  Intentando con QR...\n'))
+                this.useQR()
+            }
+        } else {
+            // QR Code
+            this.useQR()
+        }
+    }
+
+    useQR() {
+        console.log(chalk.yellow('\n  📱 Esperando QR...\n'))
+        
+        this.sock.ev.on('connection.update', (update) => {
+            const { qr } = update
+            if (qr) {
+                console.log(chalk.cyan('\n  Escanea con WhatsApp:\n'))
+                qrcode.generate(qr, { small: true })
+            }
+        })
+    }
+
     handleConnection(update) {
         const { connection, lastDisconnect, qr } = update
 
-        if (qr) {
-            console.log(chalk.yellow('\n📱 Escanea el QR:\n'))
-            qrcode.generate(qr, { small: true })
-        }
-
         if (connection === 'open') {
-            console.log(chalk.green('\n✅ Bot conectado\n'))
-            console.log(chalk.blue(`👤 ${this.sock.user.id.split(':')[0]}`))
+            console.log(chalk.green('\n✅ Bot conectado y listo\n'))
+            console.log(chalk.blue(`👤 Número: ${this.sock.user.id.split(':')[0]}`))
+            rl.close()
         }
 
         if (connection === 'close') {
@@ -202,4 +252,4 @@ class Bot {
 }
 
 export default Bot
-                    
+            
