@@ -51,6 +51,11 @@ class Bot {
 
         await this.loadPlugins()
         
+        // Cargar moneda guardada
+        const monedaGuardada = database.getConfig('monedaNombre')
+        global.monedaNombre = monedaGuardada || 'MelpCoins'
+        console.log(chalk.blue(`💰 Moneda: ${global.monedaNombre}`))
+        
         this.rentaManager = new RentaManager(this.sock)
     }
 
@@ -194,12 +199,25 @@ class Bot {
                 isGroup: chat.endsWith('@g.us'),
                 body,
                 args: body.split(' ').slice(1),
+                pushName: msg.pushName || '',
                 reply: (text) => this.sendMessage(chat, text, msg),
                 sendImage: (buffer, caption) => this.sock.sendMessage(chat, { image: buffer, caption }, { quoted: msg }),
                 database
             }
 
             const plugin = this.commands.get(command)
+            
+            // Verificar ownerOnly
+            if (plugin.ownerOnly) {
+                const config = await import('../src/config.js').then(m => m.default)
+                const validOwners = config.owner.filter(n => n.length > 0)
+                const senderNumber = sender.split('@')[0]
+                
+                if (!validOwners.includes(senderNumber)) {
+                    return this.sendMessage(chat, '🚫 *Solo owners pueden usar esto*', msg)
+                }
+            }
+            
             if (plugin && plugin.run) {
                 this.setCooldown(sender, command)
                 await plugin.run(ctx.sock, ctx.msg, ctx)
@@ -252,4 +270,4 @@ class Bot {
 }
 
 export default Bot
-            
+                        
