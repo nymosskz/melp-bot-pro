@@ -3,7 +3,7 @@ import { Boom } from '@hapi/boom'
 import pino from 'pino'
 import chalk from 'chalk'
 import qrcode from 'qrcode-terminal'
-import { readdirSync } from 'fs'
+import { readdirSync, statSync } from 'fs'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import database from '../database/Database.js'
@@ -15,7 +15,7 @@ class Bot {
     constructor() {
         this.sock = null
         this.commands = new Map()
-        this.aliases = new Map()
+        this.plugins = new Map()
         this.cooldowns = new Map()
         this.rentaManager = null
     }
@@ -36,9 +36,8 @@ class Bot {
         this.sock.ev.on('connection.update', (update) => this.handleConnection(update))
         this.sock.ev.on('messages.upsert', (m) => this.handleMessage(m))
 
-        await this.loadCommands()
+        await this.loadPlugins()
         
-        // Iniciar renta si existe
         this.rentaManager = new RentaManager(this.sock)
     }
 
@@ -46,13 +45,13 @@ class Bot {
         const { connection, lastDisconnect, qr } = update
 
         if (qr) {
-            console.log(chalk.yellow('\n📱 Escanea el QR con WhatsApp:\n'))
+            console.log(chalk.yellow('\n📱 Escanea el QR:\n'))
             qrcode.generate(qr, { small: true })
         }
 
         if (connection === 'open') {
-            console.log(chalk.green('\n✅ Bot conectado y listo\n'))
-            console.log(chalk.blue(`👤 Número: ${this.sock.user.id.split(':')[0]}`))
+            console.log(chalk.green('\n✅ Bot conectado\n'))
+            console.log(chalk.blue(`👤 ${this.sock.user.id.split(':')[0]}`))
         }
 
         if (connection === 'close') {
@@ -64,22 +63,57 @@ class Bot {
         }
     }
 
-    async loadCommands() {
-        const commandsDir = join(process.cwd(), 'src', 'commands')
+    async loadPlugins() {
+        const pluginsDir = join(process.cwd(), 'plugins')
         
-        // Comandos base (sin archivos externos aún)
-        this.registerCommand('menu', this.cmdMenu.bind(this))
-        this.registerCommand('help', this.cmdMenu.bind(this))
-        this.registerCommand('ayuda', this.cmdMenu.bind(this))
+        const loadDir = async (dir) => {
+            const files = readdirSync(dir)
+            
+            for (const file of files) {
+                const path = join(dir, file)
+                const stat = statSync(path)
+                
+                if (stat.isDirectory()) {
+                    await loadDir(path)
+                } else if (file.endsWith('.js')) {
+                    await this.loadPlugin(path, file)
+                }
+            }
+        }
+        
+        try {
+            await loadDir(pluginsDir)
+        } catch (err) {
+            console.log(chalk.yellow('⚠️  Carpeta plugins vacía o no existe'))
+        }
         
         console.log(chalk.green(`✓ ${this.commands.size} comandos cargados`))
     }
 
-    registerCommand(name, handler, aliases = []) {
-        this.commands.set(name.toLowerCase(), handler)
-        aliases.forEach(alias => {
-            this.aliases.set(alias.toLowerCase(), name.toLowerCase())
-        })
+    async loadPlugin(path, filename) {
+        try {
+            const module = await import('file://' + path + '?t=' + Date.now())
+            const plugin = module.default
+            
+            if (!plugin || !plugin.command) return
+            
+            const commands = Array.isArray(plugin.command) 
+                ? plugin.command 
+                : [plugin.command]
+            
+            commands.forEach(cmd => {
+                this.commands.set(cmd.toLowerCase(), plugin)
+                console.log(chalk.gray(`  • ${cmd}`))
+            })
+            
+            this.plugins.set(filename, {
+                file: filename,
+                commands: commands
+            })
+            
+        } catch (err) {
+            console.error(chalk.red(`✗ Error en ${filename}:`), err.message)
+        }
     }
 
     async handleMessage(chatUpdate) {
@@ -92,39 +126,33 @@ class Bot {
 
             const sender = msg.key.participant || msg.key.remoteJid
             const chat = msg.key.remoteJid
-            const isGroup = chat.endsWith('@g.us')
 
-            // Verificar renta
             if (this.rentaManager && !this.rentaManager.checkAccess(sender)) {
                 return
             }
 
-            // Detectar comando por palabra clave
-            const command = this.detectCommand(body)
+            const command = this.findCommand(body)
             if (!command) return
 
-            // Verificar cooldown
-            if (this.isOnCooldown(sender, command)) {
-                await this.sendMessage(chat, '⏳ Espera un momento...', msg)
-                return
-            }
+            if (this.isOnCooldown(sender, command)) return
 
-            // Ejecutar
             const ctx = {
                 sock: this.sock,
                 msg,
                 sender,
                 chat,
-                isGroup,
+                isGroup: chat.endsWith('@g.us'),
                 body,
+                args: body.split(' ').slice(1),
                 reply: (text) => this.sendMessage(chat, text, msg),
+                sendImage: (buffer, caption) => this.sock.sendMessage(chat, { image: buffer, caption }, { quoted: msg }),
                 database
             }
 
-            const handler = this.commands.get(command)
-            if (handler) {
+            const plugin = this.commands.get(command)
+            if (plugin && plugin.run) {
                 this.setCooldown(sender, command)
-                await handler(ctx)
+                await plugin.run(ctx.sock, ctx.msg, ctx)
             }
 
         } catch (err) {
@@ -132,23 +160,16 @@ class Bot {
         }
     }
 
-    detectCommand(body) {
-        // Palabras clave exactas al inicio del mensaje
-        const keywords = ['menu', 'help', 'ayuda', 'work', 'slut', 'crime', 'rob', 'bal', 'perfil', 'granja', 'mp', 'expedicion']
+    findCommand(body) {
+        const firstWord = body.split(/\s+/)[0]
         
-        const words = body.split(/\s+/)
-        const firstWord = words[0]
+        if (this.commands.has(firstWord)) {
+            return firstWord
+        }
         
-        // Verificar comando directo
-        if (this.commands.has(firstWord)) return firstWord
-        
-        // Verificar alias
-        if (this.aliases.has(firstWord)) return this.aliases.get(firstWord)
-        
-        // Verificar si empieza con alguna keyword
-        for (const keyword of keywords) {
-            if (body.startsWith(keyword + ' ') || body === keyword) {
-                if (this.commands.has(keyword)) return keyword
+        for (const [cmd, plugin] of this.commands) {
+            if (body.startsWith(cmd + ' ') || body === cmd) {
+                return cmd
             }
         }
         
@@ -171,47 +192,14 @@ class Bot {
         const key = `${user}-${command}`
         const last = this.cooldowns.get(key)
         if (!last) return false
-        return Date.now() - last < 3000 // 3 segundos
+        return Date.now() - last < 3000
     }
 
     setCooldown(user, command) {
         const key = `${user}-${command}`
         this.cooldowns.set(key, Date.now())
     }
-
-    // Comandos base
-    async cmdMenu(ctx) {
-        const menu = `
-╭━━━「 *MELP BOT PRO* 」━━━╮
-
-🤖 *Comandos disponibles:*
-
-💰 *Economía:*
-• work - Trabajar
-• slut - Trabajo riesgoso  
-• crime - Cometer crímenes
-• rob @user - Robar a alguien
-• bal - Ver tu dinero
-• perfil - Tu perfil
-
-🌾 *Granja:*
-• granja - Ver tu granja
-• mp - Misiones de plantas
-• expedicion - Misiones de animales
-
-🎰 *Juegos:*
-• blackjack - Jugar 21
-• slot - Tragamonedas
-
-👥 *Admin:* (grupos)
-• kick @user - Expulsar
-• ban @user - Banear
-
-╰━━━━━━━━━━━━━━━━━━━━━━╯
-        `
-        await ctx.reply(menu.trim())
-    }
 }
 
 export default Bot
-  
+                    
