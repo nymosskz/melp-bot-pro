@@ -5,7 +5,7 @@ export default {
     ownerOnly: true,
     
     run: async (sock, msg, ctx) => {
-        const { args, reply, sender } = ctx
+        const { args, reply, sender, database } = ctx
         
         // Verificar owner
         const senderNumber = sender.split('@')[0]
@@ -17,12 +17,15 @@ export default {
         
         // Verificar argumento
         if (!args || args.length === 0) {
-            const monedaActual = global.monedaNombre || 'MelpCoins'
+            // Obtener moneda actual de la DB (o default)
+            const monedaActual = await database.getConfig('monedaNombre') || 'MelpCoins'
             return reply(`
 💰 *Moneda actual:* ${monedaActual}
 
 *Uso:* setmoneda <nombre>
 *Ejemplo:* setmoneda Diamantes
+
+⚙️ Personaliza tu economía
             `.trim())
         }
         
@@ -36,13 +39,12 @@ export default {
             return reply('❌ Nombre muy corto (mín 2 caracteres)')
         }
         
-        // Guardar globalmente
-        global.monedaNombre = nuevaMoneda
+        // Guardar en database (persistente)
+        await database.setConfig('monedaNombre', nuevaMoneda)
         
-        // Guardar en database si quieres persistencia
-        // (opcional, para reinicios)
+        // Actualizar en runtime
+        global.monedaNombre = nuevaMoneda
         
         await reply(`✅ *Moneda cambiada a:* ${nuevaMoneda}\n\n💡 Todos los comandos ahora usan esta moneda`)
     }
 }
-
