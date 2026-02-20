@@ -28,6 +28,11 @@ db.exec(`
         animals TEXT DEFAULT '[]',
         level INTEGER DEFAULT 1
     );
+
+    CREATE TABLE IF NOT EXISTS config (
+        key TEXT PRIMARY KEY,
+        value TEXT
+    );
 `)
 
 export default {
@@ -52,6 +57,22 @@ export default {
         const field = toBank ? 'bank' : 'money'
         const stmt = db.prepare(`UPDATE users SET ${field} = ${field} + ? WHERE jid = ?`)
         return stmt.run(amount, jid)
+    },
+
+    // === NUEVOS MÉTODOS PARA CONFIG ===
+    
+    getConfig(key) {
+        const row = db.prepare('SELECT value FROM config WHERE key = ?').get(key)
+        return row ? row.value : null
+    },
+
+    setConfig(key, value) {
+        const stmt = db.prepare(`
+            INSERT INTO config (key, value) 
+            VALUES (?, ?) 
+            ON CONFLICT(key) 
+            DO UPDATE SET value = excluded.value
+        `)
+        return stmt.run(key, value)
     }
 }
-
