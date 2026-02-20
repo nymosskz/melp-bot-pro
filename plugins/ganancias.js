@@ -8,13 +8,14 @@ export default {
     run: async (sock, msg, ctx) => {
         const { body, sender, reply, database } = ctx
         
-        const firstWord = body.split(/\s+/)[0]
-        const cmd = ['w'].includes(firstWord) ? 'work' : firstWord
-        
+        // Verificar registro primero
         const user = database.getUser(sender)
         if (!user) {
-            return reply(`🦧 *¡ALTO!* No estás registrado.\n👉 Escribe *menu* para empezar`)
+            return reply(`🦧 *¡ALTO!* No estás registrado.\n👉 Escribe *reg* para empezar`)
         }
+        
+        const firstWord = body.split(/\s+/)[0]
+        const cmd = ['w'].includes(firstWord) ? 'work' : firstWord
         
         const tiempos = {
             work: 60000,
@@ -168,5 +169,47 @@ export default {
             }
             
             if ((victima.money || 0) < 500) {
-                return reply(`🤏 Está en la quiebra, no
-              
+                return reply(`🤏 Está en la quiebra, no tiene nada que robar`)
+            }
+            
+            const exito = Math.random() > 0.5
+            const cantidadRobar = Math.floor((victima.money || 0) * (Math.random() * 0.3 + 0.1))
+            
+            if (exito) {
+                database.addMoney(sender, cantidadRobar)
+                database.addMoney(mentioned, -cantidadRobar)
+                
+                const robSuccess = [
+                    `🏃‍♂️💨 Le quitaste *${formatMoney(cantidadRobar)}* a @${mentioned.split('@')[0]}`,
+                    `🔪 Amenazaste y le sacaste *${formatMoney(cantidadRobar)}* a @${mentioned.split('@')[0]}`,
+                    `💉 Distraíste y robaste *${formatMoney(cantidadRobar)}* de @${mentioned.split('@')[0]}`
+                ]
+                mensaje = robSuccess[Math.floor(Math.random() * robSuccess.length)]
+                finalGanancia = cantidadRobar
+            } else {
+                const multa = Math.floor(Math.random() * 1000) + 500
+                database.addMoney(sender, -multa)
+                
+                const robFail = [
+                    `🚔 Te atrapó la policía, multa *${formatMoney(multa)}*`,
+                    `💪 Te partió la madre y perdiste *${formatMoney(multa)}*`,
+                    `📢 Gritó y escapaste, dejando caer *${formatMoney(multa)}*`
+                ]
+                mensaje = robFail[Math.floor(Math.random() * robFail.length)]
+                finalGanancia = -multa
+            }
+        }
+        
+        // Actualizar dinero
+        if (finalGanancia !== 0) {
+            database.addMoney(sender, finalGanancia)
+        }
+        
+        // Actualizar cooldown
+        lastCommands[cmd] = now
+        database.updateUser(sender, { last_commands: JSON.stringify(lastCommands) })
+        
+        // Enviar mensaje
+        await reply(mensaje)
+    }
+                                                                                  }
