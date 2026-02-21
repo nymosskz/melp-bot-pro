@@ -1,0 +1,31 @@
+{
+  "name": "melp-bot-pro",
+  "version": "3.0.0",
+  "description": "Bot de WhatsApp profesional con SQLite y sistema de plugins",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "author": "MelpBot",
+  "license": "ISC",
+  "dependencies": {
+    "@whiskeysockets/baileys": "latest",
+    "@hapi/boom": "^10.0.1",
+    "pino": "^9.0.0",
+    "chalk": "^5.3.0",
+    "qrcode-terminal": "^0.12.0",
+    "node-cache": "^5.1.2",
+    "better-sqlite3": "^11.0.0",
+    "axios": "^1.6.0",
+    "cheerio": "^1.0.0-rc.12",
+    "fluent-ffmpeg": "^2.1.2",
+    "form-data": "^4.0.0",
+    "fs-extra": "^11.1.1",
+    "sharp": "^0.33.2",
+    "wa-sticker-formatter": "^4.4.4",
+    "moment-timezone": "^0.5.43",
+    "performance-now": "^2.1.0"
+  }
+}
+
