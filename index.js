@@ -8,6 +8,7 @@ import { pathToFileURL } from 'url'
 import Database from 'better-sqlite3'
 
 const db = new Database('melp_pro.db')
+
 db.prepare(`CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY, 
     coins INTEGER DEFAULT 100, 
@@ -23,6 +24,18 @@ db.prepare(`CREATE TABLE IF NOT EXISTS groups (
     antilink INTEGER DEFAULT 0, 
     antilinkall INTEGER DEFAULT 0
 )`).run()
+
+db.prepare(`CREATE TABLE IF NOT EXISTS settings (
+    id INTEGER PRIMARY KEY, 
+    brand TEXT DEFAULT 'Melp', 
+    moneda TEXT DEFAULT 'MelpCoins',
+    name TEXT DEFAULT 'Melp Bot Pro'
+)`).run()
+
+const checkSettings = db.prepare("SELECT * FROM settings WHERE id = 1").get()
+if (!checkSettings) {
+    db.prepare("INSERT INTO settings (id, brand, moneda, name) VALUES (1, 'Melp', 'MelpCoins', 'Melp Bot Pro')").run()
+}
 
 const CONFIG = {
     prefijo: /^[./!#]/,
@@ -57,7 +70,7 @@ async function checkRentas(sock) {
             db.prepare("UPDATE users SET renta_fin = 0, aviso = 0 WHERE id = ?").run(u.id)
             if (existsSync('./session-pro')) {
                 rmSync('./session-pro', { recursive: true, force: true })
-                console.log(chalk.red(`[EXPIRADO] Renta de ${u.id} terminó. Sesión borrada.`))
+                console.log(chalk.red(`[EXPIRADO] Renta terminada. Sesión eliminada.`))
                 process.exit(0)
             }
             continue
@@ -155,6 +168,7 @@ async function startMelpPro() {
         let user = db.prepare("SELECT * FROM users WHERE id = ?").get(senderNum)
         if (!user) { db.prepare("INSERT INTO users (id) VALUES (?)").run(senderNum); user = db.prepare("SELECT * FROM users WHERE id = ?").get(senderNum) }
         
+        let settings = db.prepare("SELECT * FROM settings WHERE id = 1").get()
         const isOwner = senderNum === botNum || user.permiso === 'owner'
         const isPremium = user.permiso === 'premium' || isOwner
 
@@ -170,15 +184,10 @@ async function startMelpPro() {
             if (botIsAdmin && !isAdmin) {
                 const isWaLink = /chat.whatsapp.com/gi.test(msgText)
                 const isAllLink = /https?:\/\/\S+/gi.test(msgText)
-                
                 if ((group.antilink === 1 && isWaLink) || (group.antilinkall === 1 && isAllLink)) {
                     await sock.sendMessage(chat, { delete: m.key })
                     await sock.groupParticipantsUpdate(chat, [sender], 'remove').catch(() => {})
-                    await sock.sendMessage(chat, { 
-                        text: `🚫 @${senderNum} expulsado por enviar enlaces prohibidos.`,
-                        mentions: [sender]
-                    })
-                    return
+                    return await sock.sendMessage(chat, { text: `🚫 @${senderNum} expulsado por enviar enlaces prohibidos.`, mentions: [sender] })
                 }
             }
         }
@@ -201,7 +210,7 @@ async function startMelpPro() {
             if (plugin.isPremium && !isPremium) return sock.sendMessage(chat, { text: '🎟️ Solo Premium.' })
             if (!tieneRenta) return 
             await sock.sendMessage(chat, { text: '⏳ Procesando...' }, { quoted: m })
-            try { await plugin.run(sock, m, { args, user, db, isOwner, isPremium, chat, senderNum, botNum, isGroup }) } catch (e) { console.error(e) }
+            try { await plugin.run(sock, m, { args, user, db, isOwner, isPremium, chat, senderNum, botNum, isGroup, settings }) } catch (e) { console.error(e) }
         }
     })
 
