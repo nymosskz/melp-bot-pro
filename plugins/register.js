@@ -1,4 +1,4 @@
-import database from '../database/Database.js'
+import database from '../src/database/Database.js'
 
 export default {
     command: ['reg', 'register', 'registro'],
