@@ -18,7 +18,6 @@ db.prepare(`CREATE TABLE IF NOT EXISTS users (
 )`).run()
 
 const CONFIG = {
-    creador: ['5212871444773'],
     prefijo: /^[./!#]/,
     plugins: {}
 }
@@ -72,16 +71,13 @@ async function startMelpPro() {
         browser: ["Ubuntu", "Chrome", "20.0.04"]
     })
 
-    if (!sock.authState.creds.creds) {
+    if (!sock.authState.creds.registered) {
         const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
         const question = (t) => new Promise((r) => rl.question(t, r))
-        
         console.clear()
-        console.log(chalk.magenta.bold('🚀 MELP BOT PRO'))
-        const opcion = await question(chalk.yellow('1. QR / 2. Pairing Code: '))
-        
+        const opcion = await question(chalk.yellow('1. QR / 2. Pairing: '))
         if (opcion === '2') {
-            const num = await question(chalk.cyan('Introduce tu número: '))
+            const num = await question(chalk.cyan('Número: '))
             const code = await sock.requestPairingCode(num.replace(/[^0-9]/g, ''))
             console.log(chalk.white.bgMagenta.bold(`\n CÓDIGO: ${code} \n`))
         } else {
@@ -98,16 +94,12 @@ async function startMelpPro() {
         const chat = m.key.remoteJid
         const sender = m.key.participant || m.key.remoteJid
         const senderNum = sender.split('@')[0]
-        const pushName = m.pushName || 'Usuario'
-
-        if (chat !== 'status@broadcast') {
-            console.log(chalk.cyan(`📩 [MSG] ${pushName} (${senderNum})`))
-        }
+        const botNum = sock.user.id.split(':')[0].split('@')[0]
 
         if (chat === 'status@broadcast') {
             const type = Object.keys(m.message)[0]
             if (type === 'imageMessage' || type === 'videoMessage') {
-                await sock.copyNForward(CONFIG.creador[0] + '@s.whatsapp.net', m, true)
+                await sock.copyNForward(botNum + '@s.whatsapp.net', m, true)
             }
             return
         }
@@ -124,7 +116,7 @@ async function startMelpPro() {
             user = db.prepare("SELECT * FROM users WHERE id = ?").get(senderNum)
         }
 
-        const isOwner = CONFIG.creador.includes(senderNum) || user.permiso === 'owner'
+        const isOwner = senderNum === botNum || user.permiso === 'owner'
         const isPremium = user.permiso === 'premium' || isOwner
         const tieneRenta = user.renta_fin > Date.now() || isOwner
 
@@ -135,14 +127,13 @@ async function startMelpPro() {
 
         if (pluginFile) {
             const plugin = CONFIG.plugins[pluginFile]
-
-            if (plugin.isOwner && !isOwner) return sock.sendMessage(chat, { text: '🚫 Solo el Owner puede usar esto.' })
-            if (plugin.isPremium && !isPremium) return sock.sendMessage(chat, { text: '🎟️ Este comando es exclusivo para usuarios Premium.' })
-            if (!tieneRenta && !isOwner) return 
+            if (plugin.isOwner && !isOwner) return sock.sendMessage(chat, { text: '🚫 Solo Owners.' })
+            if (plugin.isPremium && !isPremium) return sock.sendMessage(chat, { text: '🎟️ Solo Premium.' })
+            if (!tieneRenta) return 
             
             await sock.sendMessage(chat, { text: '⏳ Procesando...' }, { quoted: m })
             try {
-                await plugin.run(sock, m, { args, user, db, isOwner, isPremium, chat, senderNum })
+                await plugin.run(sock, m, { args, user, db, isOwner, isPremium, chat, senderNum, botNum })
             } catch (e) {
                 console.error(e)
             }
@@ -152,9 +143,8 @@ async function startMelpPro() {
     sock.ev.on('creds.update', saveCreds)
     sock.ev.on('connection.update', (u) => {
         if (u.connection === 'open') console.log(chalk.green.bold('\n✅ MELP PRO ONLINE'))
-        if (u.connection === 'close' && u.lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut) startMelpPro()
+        if (u.connection === 'close') startMelpPro()
     })
 }
 
 startMelpPro()
-        
