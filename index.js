@@ -13,7 +13,8 @@ db.prepare(`CREATE TABLE IF NOT EXISTS users (
     coins INTEGER DEFAULT 100, 
     xp INTEGER DEFAULT 0, 
     renta_fin INTEGER DEFAULT 0,
-    nivel INTEGER DEFAULT 1
+    nivel INTEGER DEFAULT 1,
+    permiso TEXT DEFAULT 'user'
 )`).run()
 
 const CONFIG = {
@@ -71,7 +72,7 @@ async function startMelpPro() {
         browser: ["Ubuntu", "Chrome", "20.0.04"]
     })
 
-    if (!sock.authState.creds.registered) {
+    if (!sock.authState.creds.creds) {
         const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
         const question = (t) => new Promise((r) => rl.question(t, r))
         
@@ -120,11 +121,12 @@ async function startMelpPro() {
         let user = db.prepare("SELECT * FROM users WHERE id = ?").get(senderNum)
         if (!user) {
             db.prepare("INSERT INTO users (id) VALUES (?)").run(senderNum)
-            user = { id: senderNum, coins: 100, xp: 0, renta_fin: 0, nivel: 1 }
+            user = db.prepare("SELECT * FROM users WHERE id = ?").get(senderNum)
         }
 
-        const isCreador = CONFIG.creador.includes(senderNum)
-        const tieneRenta = user.renta_fin > Date.now() || isCreador
+        const isOwner = CONFIG.creador.includes(senderNum) || user.permiso === 'owner'
+        const isPremium = user.permiso === 'premium' || isOwner
+        const tieneRenta = user.renta_fin > Date.now() || isOwner
 
         const pluginFile = Object.keys(CONFIG.plugins).find(file => {
             const p = CONFIG.plugins[file]
@@ -132,12 +134,15 @@ async function startMelpPro() {
         })
 
         if (pluginFile) {
-            if (!tieneRenta && !isCreador) return 
+            const plugin = CONFIG.plugins[pluginFile]
+
+            if (plugin.isOwner && !isOwner) return sock.sendMessage(chat, { text: '🚫 Solo el Owner puede usar esto.' })
+            if (plugin.isPremium && !isPremium) return sock.sendMessage(chat, { text: '🎟️ Este comando es exclusivo para usuarios Premium.' })
+            if (!tieneRenta && !isOwner) return 
             
             await sock.sendMessage(chat, { text: '⏳ Procesando...' }, { quoted: m })
             try {
-                const plugin = CONFIG.plugins[pluginFile]
-                await plugin.run(sock, m, { args, user, db, isCreador, chat, senderNum })
+                await plugin.run(sock, m, { args, user, db, isOwner, isPremium, chat, senderNum })
             } catch (e) {
                 console.error(e)
             }
