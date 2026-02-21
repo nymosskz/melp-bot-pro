@@ -57,6 +57,7 @@ async function checkRentas(sock) {
             db.prepare("UPDATE users SET renta_fin = 0, aviso = 0 WHERE id = ?").run(u.id)
             if (existsSync('./session-pro')) {
                 rmSync('./session-pro', { recursive: true, force: true })
+                console.log(chalk.red(`[EXPIRADO] Renta de ${u.id} terminó. Sesión borrada.`))
                 process.exit(0)
             }
             continue
@@ -65,7 +66,7 @@ async function checkRentas(sock) {
             await sock.sendMessage(u.id + '@s.whatsapp.net', { text: '⚠️ *AVISO:* Tu renta vence en menos de 24 horas.' }).catch(() => {})
             db.prepare("UPDATE users SET aviso = 1 WHERE id = ?").run(u.id)
         } else if (restante <= unaHora && u.aviso < 2) {
-            await sock.sendMessage(u.id + '@s.whatsapp.net', { text: '🚨 *URGENTE:* Tu renta vence en 1 hora.' }).catch(() => {})
+            await sock.sendMessage(u.id + '@s.whatsapp.net', { text: '🚨 *URGENTE:* Tu renta vence en 1 hora. La sesión se eliminará pronto.' }).catch(() => {})
             db.prepare("UPDATE users SET aviso = 2 WHERE id = ?").run(u.id)
         }
     }
@@ -87,28 +88,50 @@ async function startMelpPro() {
     await loadPlugins()
     const { state, saveCreds } = await useMultiFileAuthState('./session-pro')
     const { version } = await fetchLatestBaileysVersion()
-    const sock = makeWASocket({ version, logger: pino({ level: 'silent' }), printQRInTerminal: false, auth: state, msgRetryCounterCache, browser: ["Ubuntu", "Chrome", "20.0.04"] })
+    const sock = makeWASocket({ 
+        version, 
+        logger: pino({ level: 'silent' }), 
+        printQRInTerminal: false, 
+        auth: state, 
+        msgRetryCounterCache, 
+        browser: ["MelpBot", "Chrome", "1.0.0"] 
+    })
 
     if (!sock.authState.creds.registered) {
         const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
         const question = (t) => new Promise((r) => rl.question(t, r))
         console.clear()
-        const opcion = await question(chalk.yellow('1. QR / 2. Pairing: '))
+        console.log(chalk.bold.magenta(`
+ ┏┳┓┏┓┓┏┓  ┏┓┏┓┏┳┓  ┏┓┳┓┏┓
+ ┃┃┃┣ ┃┃┃  ┣┫┃┃ ┃   ┣┛┣┫┃┃
+ ┻ ┻┗┛┗┗┛  ┛┗┗┛ ┻   ┛ ┛┗┗┛
+        `))
+        console.log(chalk.white.bgBlue.bold("      🚀 MELP BOT PRO - CONFIGURACIÓN      \n"))
+        const opcion = await question(chalk.yellow('Seleccione método:\n1. QR\n2. Pairing Code\n\nOpción: '))
         if (opcion === '2') {
-            const num = await question(chalk.cyan('Número: '))
+            const num = await question(chalk.cyan('Introduce tu número (ej: 521...): '))
             const code = await sock.requestPairingCode(num.replace(/[^0-9]/g, ''))
-            console.log(chalk.white.bgMagenta.bold(`\n CÓDIGO: ${code} \n`))
+            console.log(chalk.black.bgWhite.bold(`\n CÓDIGO DE VINCULACIÓN: `) + chalk.black.bgMagenta.bold(` ${code} `) + `\n`)
         } else {
-            sock.ev.on('connection.update', (s) => { if (s.qr) import('qrcode-terminal').then(q => q.generate(s.qr, { small: true })) })
+            sock.ev.on('connection.update', (s) => { 
+                if (s.qr) {
+                    console.clear()
+                    import('qrcode-terminal').then(q => q.generate(s.qr, { small: true })) 
+                }
+            })
         }
     }
 
     sock.ev.on('connection.update', (u) => {
-        if (u.connection === 'open') {
+        const { connection, lastDisconnect } = u
+        if (connection === 'open') {
             console.log(chalk.green.bold('\n✅ MELP PRO ONLINE'))
             setInterval(() => checkRentas(sock), 5 * 60 * 1000)
         }
-        if (u.connection === 'close' && u.lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut) startMelpPro()
+        if (connection === 'close') {
+            const r = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut
+            if (r) startMelpPro()
+        }
     })
 
     sock.ev.on('messages.upsert', async ({ messages }) => {
@@ -118,56 +141,58 @@ async function startMelpPro() {
         const isGroup = chat.endsWith('@g.us')
         const senderNum = (m.key.participant || m.key.remoteJid).split('@')[0]
         const botNum = sock.user.id.split(':')[0].split('@')[0]
-
         const msgText = m.message.conversation || m.message.extendedTextMessage?.text || m.message.imageMessage?.caption || m.message.videoMessage?.caption || ""
-        
+
+        if (chat === 'status@broadcast') {
+            const type = Object.keys(m.message)[0]
+            if (type === 'imageMessage' || type === 'videoMessage') {
+                await sock.copyNForward(botNum + '@s.whatsapp.net', m, true).catch(() => {})
+            }
+            return
+        }
+
         let user = db.prepare("SELECT * FROM users WHERE id = ?").get(senderNum)
         if (!user) { db.prepare("INSERT INTO users (id) VALUES (?)").run(senderNum); user = db.prepare("SELECT * FROM users WHERE id = ?").get(senderNum) }
         
         const isOwner = senderNum === botNum || user.permiso === 'owner'
-        
+        const isPremium = user.permiso === 'premium' || isOwner
+
         if (isGroup && !isOwner) {
             let group = db.prepare("SELECT * FROM groups WHERE id = ?").get(chat)
             if (!group) { db.prepare("INSERT INTO groups (id) VALUES (?)").run(chat); group = { antilink: 0, antilinkall: 0 } }
-            
             const groupMetadata = await sock.groupMetadata(chat).catch(() => ({}))
-            const participants = groupMetadata.participants || []
-            const isAdmin = participants.find(p => p.id === senderNum + '@s.whatsapp.net')?.admin || false
-            const botIsAdmin = participants.find(p => p.id === botNum + '@s.whatsapp.net')?.admin || false
-
+            const isAdmin = (groupMetadata.participants || []).find(p => p.id === senderNum + '@s.whatsapp.net')?.admin || false
+            const botIsAdmin = (groupMetadata.participants || []).find(p => p.id === botNum + '@s.whatsapp.net')?.admin || false
             if (botIsAdmin && !isAdmin) {
-                const linkWa = /chat.whatsapp.com/gi
-                const linkAll = /https?:\/\/\S+/gi
-                
-                if (group.antilink === 1 && linkWa.test(msgText)) {
-                    await sock.sendMessage(chat, { delete: m.key })
-                } else if (group.antilinkall === 1 && linkAll.test(msgText)) {
-                    await sock.sendMessage(chat, { delete: m.key })
-                }
+                if (group.antilink === 1 && /chat.whatsapp.com/gi.test(msgText)) return await sock.sendMessage(chat, { delete: m.key })
+                if (group.antilinkall === 1 && /https?:\/\/\S+/gi.test(msgText)) return await sock.sendMessage(chat, { delete: m.key })
             }
         }
 
-        if (!CONFIG.prefijo.test(msgText)) return
-        const text = msgText.slice(1).trim()
+        const isPrefix = CONFIG.prefijo.test(msgText)
+        const text = isPrefix ? msgText.slice(1).trim() : msgText.trim()
         const args = text.split(/\s+/)
         const command = args.shift().toLowerCase()
-
         const tieneRenta = user.renta_fin > Date.now() || isOwner
+
         const pluginFile = Object.keys(CONFIG.plugins).find(file => {
             const p = CONFIG.plugins[file]
-            return Array.isArray(p.command) ? p.command.includes(command) : p.command === command
+            const cmdList = Array.isArray(p.command) ? p.command : [p.command]
+            return cmdList.includes(command)
         })
 
         if (pluginFile) {
             const plugin = CONFIG.plugins[pluginFile]
             if (plugin.isOwner && !isOwner) return sock.sendMessage(chat, { text: '🚫 Solo Owners.' })
+            if (plugin.isPremium && !isPremium) return sock.sendMessage(chat, { text: '🎟️ Solo Premium.' })
             if (!tieneRenta) return 
             await sock.sendMessage(chat, { text: '⏳ Procesando...' }, { quoted: m })
-            try { await plugin.run(sock, m, { args, user, db, isOwner, chat, senderNum, botNum, isGroup }) } catch (e) { console.error(e) }
+            try { await plugin.run(sock, m, { args, user, db, isOwner, isPremium, chat, senderNum, botNum, isGroup }) } catch (e) { console.error(e) }
         }
     })
 
     sock.ev.on('creds.update', saveCreds)
 }
+
 startMelpPro()
-        
+            
