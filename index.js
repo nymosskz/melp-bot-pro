@@ -139,7 +139,8 @@ async function startMelpPro() {
         if (!m.message) return
         const chat = m.key.remoteJid
         const isGroup = chat.endsWith('@g.us')
-        const senderNum = (m.key.participant || m.key.remoteJid).split('@')[0]
+        const sender = m.key.participant || m.key.remoteJid
+        const senderNum = sender.split('@')[0]
         const botNum = sock.user.id.split(':')[0].split('@')[0]
         const msgText = m.message.conversation || m.message.extendedTextMessage?.text || m.message.imageMessage?.caption || m.message.videoMessage?.caption || ""
 
@@ -157,15 +158,28 @@ async function startMelpPro() {
         const isOwner = senderNum === botNum || user.permiso === 'owner'
         const isPremium = user.permiso === 'premium' || isOwner
 
-        if (isGroup && !isOwner) {
+        if (isGroup && !isOwner && !isPremium) {
             let group = db.prepare("SELECT * FROM groups WHERE id = ?").get(chat)
             if (!group) { db.prepare("INSERT INTO groups (id) VALUES (?)").run(chat); group = { antilink: 0, antilinkall: 0 } }
+            
             const groupMetadata = await sock.groupMetadata(chat).catch(() => ({}))
-            const isAdmin = (groupMetadata.participants || []).find(p => p.id === senderNum + '@s.whatsapp.net')?.admin || false
-            const botIsAdmin = (groupMetadata.participants || []).find(p => p.id === botNum + '@s.whatsapp.net')?.admin || false
+            const participants = groupMetadata.participants || []
+            const isAdmin = participants.find(p => p.id === senderNum + '@s.whatsapp.net')?.admin || false
+            const botIsAdmin = participants.find(p => p.id === botNum + '@s.whatsapp.net')?.admin || false
+
             if (botIsAdmin && !isAdmin) {
-                if (group.antilink === 1 && /chat.whatsapp.com/gi.test(msgText)) return await sock.sendMessage(chat, { delete: m.key })
-                if (group.antilinkall === 1 && /https?:\/\/\S+/gi.test(msgText)) return await sock.sendMessage(chat, { delete: m.key })
+                const isWaLink = /chat.whatsapp.com/gi.test(msgText)
+                const isAllLink = /https?:\/\/\S+/gi.test(msgText)
+                
+                if ((group.antilink === 1 && isWaLink) || (group.antilinkall === 1 && isAllLink)) {
+                    await sock.sendMessage(chat, { delete: m.key })
+                    await sock.groupParticipantsUpdate(chat, [sender], 'remove').catch(() => {})
+                    await sock.sendMessage(chat, { 
+                        text: `🚫 @${senderNum} expulsado por enviar enlaces prohibidos.`,
+                        mentions: [sender]
+                    })
+                    return
+                }
             }
         }
 
@@ -195,4 +209,4 @@ async function startMelpPro() {
 }
 
 startMelpPro()
-            
+        
