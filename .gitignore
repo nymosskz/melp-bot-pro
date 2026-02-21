@@ -1,0 +1,25 @@
+# Sesiones y Datos (Lo más importante)
+session-pro/
+database.json
+*.session
+creds.json
+
+# Dependencias
+node_modules/
+
+# Archivos de registro y caché
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.npm
+.cache
+
+# Archivos del sistema
+.DS_Store
+Thumbs.db
+.env
+
+# Temporales de edición
+*.swp
+*.log
+
