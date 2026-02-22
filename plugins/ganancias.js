@@ -40,7 +40,7 @@ export default {
                 `🧹 Limpiaste servidores de ${brand} Tech y encontraste *${ganancia} ${moneda}*`,
                 `👨‍💻 Programaste un script para ${brand} Corp y te pagaron *${ganancia} ${moneda}*`,
                 `📦 Repartiste paquetes y sacaste *${ganancia} ${moneda}* en propinas`,
-                `🍔 Trabajaste en comida rápida de ${brand} y ganaste *${ganancia} ${moneda}*`,
+                `🍔 Trabajaste en comida rápida de Mc ${brand} y ganaste *${ganancia} ${moneda}*`,
                 `⛽ Despachaste gasolina en la estación ${brand} y ganaste *${ganancia} ${moneda}*`,
                 `🏢 Limpiaste cristales de rascacielos y ganaste *${ganancia} ${moneda}*`,
                 `📞 Soporte técnico en ${brand}, te depositaron *${ganancia} ${moneda}*`,
@@ -77,7 +77,7 @@ export default {
             if (Math.random() < 0.45) {
                 ganancia = -Math.floor(ganancia * 0.4)
                 const failCrime = [
-                    `👮 ¡La policía de ${brand} te esperaba! Multa de *${Math.abs(ganancia)} ${moneda}*`,
+                    `👮 ¡La policía de ${brand} City te esperaba! Multa de *${Math.abs(ganancia)} ${moneda}*`,
                     `🚑 El asalto salió mal, el hospital te costó *${Math.abs(ganancia)} ${moneda}*`,
                     `🤡 Te hackearon mientras hackeabas, perdiste *${Math.abs(ganancia)} ${moneda}*`,
                     `🚔 Saltó la alarma del ${brand} Bank, fianza: *${Math.abs(ganancia)} ${moneda}*`,
@@ -86,14 +86,14 @@ export default {
                 mensaje = failCrime[Math.floor(Math.random() * failCrime.length)]
             } else {
                 const crimeTxt = [
-                    `🔫 Camión de valores de ${brand}, te llevaste *${ganancia} ${moneda}*`,
+                    `🔫 Camión de valores de ${brand} Security, te llevaste *${ganancia} ${moneda}*`,
                     `🏦 Cajero del ${brand} Bank hackeado, escupió *${ganancia} ${moneda}*`,
                     `👜 Bolso de una anciana en ${brand} Street, tenía *${ganancia} ${moneda}*`,
                     `💎 Joyería ${brand} asaltada, ganancia: *${ganancia} ${moneda}*`,
-                    `🏪 OXXO de ${brand} asaltado, caja con *${ganancia} ${moneda}*`,
+                    `🏪 OXXO de ${brand} City asaltado, caja con *${ganancia} ${moneda}*`,
                     `💻 Estafa nigeriana exitosa desde ${brand}, *${ganancia} ${moneda}*`,
-                    `📦 Paquete de Amazon robado en ${brand}, valía *${ganancia} ${moneda}*`,
-                    `💳 Tarjetas clonadas en el centro de ${brand}, ganaste *${ganancia} ${moneda}*`
+                    `📦 Paquete de Amazon robado en ${brand} City, valía *${ganancia} ${moneda}*`,
+                    `💳 Tarjetas clonadas en el centro de ${brand} City, ganaste *${ganancia} ${moneda}*`
                 ]
                 mensaje = crimeTxt[Math.floor(Math.random() * crimeTxt.length)]
             }
