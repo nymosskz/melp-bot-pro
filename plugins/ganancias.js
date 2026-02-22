@@ -14,6 +14,10 @@ export default {
             return sock.sendMessage(chat, { text: `❌ No estás registrado en ${settings.brand}.\nUsa: *.reg Nombre.Edad*` })
         }
 
+        if (user.hp <= 0) {
+            return sock.sendMessage(chat, { text: `💀 Estás gravemente herido y no puedes moverte.\nUsa *.heal* para ir al hospital.` })
+        }
+
         const userId = senderNum
         const ahora = Date.now()
         const moneda = settings.moneda || 'MelpBot'
@@ -32,6 +36,7 @@ export default {
 
         let mensaje = ''
         let ganancia = 0
+        let perdidaHP = 0
 
         if (cmd === 'work') {
             ganancia = Math.floor(Math.random() * 4000) + 1000
@@ -76,12 +81,12 @@ export default {
             ganancia = Math.floor(Math.random() * 5000) + 1500
             if (Math.random() < 0.45) {
                 ganancia = -Math.floor(ganancia * 0.4)
+                perdidaHP = 20
                 const failCrime = [
-                    `👮 ¡La policía de ${brand} City te esperaba! Multa de *${Math.abs(ganancia)} ${moneda}*`,
-                    `🚑 El asalto salió mal, el hospital te costó *${Math.abs(ganancia)} ${moneda}*`,
-                    `🤡 Te hackearon mientras hackeabas, perdiste *${Math.abs(ganancia)} ${moneda}*`,
-                    `🚔 Saltó la alarma del ${brand} Bank, fianza: *${Math.abs(ganancia)} ${moneda}*`,
-                    `🐕 Un perro guardián te mordió, vacunas: *${Math.abs(ganancia)} ${moneda}*`
+                    `👮 ¡La policía de ${brand} City te molió a palos! Multa de *${Math.abs(ganancia)} ${moneda}* y *-20 HP*`,
+                    `🚑 El asalto salió mal y terminaste herido. El hospital te costó *${Math.abs(ganancia)} ${moneda}* y *-20 HP*`,
+                    `🚔 Saltó la alarma del ${brand} Bank, en la huida te dispararon: fianza de *${Math.abs(ganancia)} ${moneda}* y *-20 HP*`,
+                    `🐕 Un perro guardián te arrancó un trozo de carne: *${Math.abs(ganancia)} ${moneda}* en medicinas y *-20 HP*`
                 ]
                 mensaje = failCrime[Math.floor(Math.random() * failCrime.length)]
             } else {
@@ -91,8 +96,6 @@ export default {
                     `👜 Bolso de una anciana en ${brand} Street, tenía *${ganancia} ${moneda}*`,
                     `💎 Joyería ${brand} asaltada, ganancia: *${ganancia} ${moneda}*`,
                     `🏪 OXXO de ${brand} City asaltado, caja con *${ganancia} ${moneda}*`,
-                    `💻 Estafa nigeriana exitosa desde ${brand}, *${ganancia} ${moneda}*`,
-                    `📦 Paquete de Amazon robado en ${brand} City, valía *${ganancia} ${moneda}*`,
                     `💳 Tarjetas clonadas en el centro de ${brand} City, ganaste *${ganancia} ${moneda}*`
                 ]
                 mensaje = crimeTxt[Math.floor(Math.random() * crimeTxt.length)]
@@ -112,19 +115,21 @@ export default {
                 const porcentaje = (Math.random() * (0.10 - 0.07) + 0.07)
                 ganancia = Math.floor(victima.coins * porcentaje)
                 db.prepare("UPDATE users SET coins = coins - ? WHERE id = ?").run(ganancia, targetId)
-                mensaje = `🏃‍♂️💨 Le quitaste *${ganancia} ${moneda}* (*${(porcentaje * 100).toFixed(1)}%*) a @${targetId}`
+                mensaje = `🏃‍♂️💨 Le quitaste *${ganancia} ${moneda}* a @${targetId}`
             } else {
                 ganancia = -(Math.floor(Math.random() * 1000) + 500)
-                mensaje = `🚔 Te atrapó la policía de ${brand}, multa de *${Math.abs(ganancia)} ${moneda}*`
+                perdidaHP = 15
+                mensaje = `🚔 La víctima se defendió y te dio una paliza. Multa de *${Math.abs(ganancia)} ${moneda}* y *-15 HP*`
             }
         }
 
         userDelays[cmd] = ahora
-        db.prepare("UPDATE users SET coins = coins + ?, xp = xp + 20 WHERE id = ?").run(ganancia, userId)
+        db.prepare("UPDATE users SET coins = coins + ?, xp = xp + 20, hp = hp - ? WHERE id = ?").run(ganancia, perdidaHP, userId)
         
         await sock.sendMessage(chat, { 
             text: mensaje, 
             mentions: [m.message.extendedTextMessage?.contextInfo?.mentionedJid?.[0] || ''] 
         }, { quoted: m })
     }
-}
+                    }
+            
