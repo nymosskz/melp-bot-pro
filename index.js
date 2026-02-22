@@ -13,6 +13,7 @@ db.prepare(`CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY, 
     name TEXT DEFAULT 'Sin Registro',
     age INTEGER DEFAULT 0,
+    hp INTEGER DEFAULT 100,
     coins INTEGER DEFAULT 100, 
     xp INTEGER DEFAULT 0, 
     nivel INTEGER DEFAULT 1,
