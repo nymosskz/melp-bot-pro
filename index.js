@@ -125,6 +125,7 @@ async function startMelpPro() {
             user = db.prepare("SELECT * FROM users WHERE id = ?").get(senderNum)
         }
         
+        const settings = db.prepare("SELECT * FROM settings WHERE id = 1").get()
         const isOwner = senderNum === botNum || user.permiso === 'owner'
         const isPremium = user.permiso === 'premium' || isOwner
 
@@ -142,10 +143,10 @@ async function startMelpPro() {
             const plugin = CONFIG.plugins[pluginKey]
             if (plugin.isOwner && !isOwner) return sock.sendMessage(m.key.remoteJid, { text: '🚫 Solo Owner.' })
             if (plugin.isPremium && !isPremium) return sock.sendMessage(m.key.remoteJid, { text: '🎟️ Solo Premium.' })
-            if (command !== 'reg' && user.registrado === 0 && !isOwner) {
-                return sock.sendMessage(m.key.remoteJid, { text: `❌ Regístrate: .reg Nombre.Edad` })
-            }
-            try { await plugin.run(sock, m, { args, user, db, isOwner, isPremium, chat: m.key.remoteJid, senderNum, botNum, command }) } catch (e) { console.error(e) }
+            
+            try { 
+                await plugin.run(sock, m, { args, user, db, isOwner, isPremium, chat: m.key.remoteJid, senderNum, botNum, settings, command }) 
+            } catch (e) { console.error(e) }
         }
     })
 
