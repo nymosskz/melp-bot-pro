@@ -9,7 +9,11 @@ const lastUsed = new Map()
 
 export default {
     command: ['work', 'w', 'slut', 'crime', 'rob', 'robar'],
-    run: async (sock, m, { db, chat, command, senderNum, settings }) => {
+    run: async (sock, m, { db, chat, command, senderNum, settings, isOwner, user }) => {
+        if (!isOwner && user.registrado === 0) {
+            return sock.sendMessage(chat, { text: `❌ No estás registrado en ${settings.brand}.\nUsa: *.reg Nombre.Edad*` })
+        }
+
         const userId = senderNum
         const ahora = Date.now()
         const moneda = settings.moneda || 'MelpBot'
@@ -123,5 +127,4 @@ export default {
             mentions: [m.message.extendedTextMessage?.contextInfo?.mentionedJid?.[0] || ''] 
         }, { quoted: m })
     }
-              }
-                  
+}
