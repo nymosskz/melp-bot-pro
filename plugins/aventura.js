@@ -1,31 +1,18 @@
 const delays = {
-    explore: 300000, // 5 min
-    mine: 600000,    // 10 min
-    gamble: 30000,   // 30 seg
-    heal: 120000,    // 2 min
-    beg: 60000       // 1 min
+    explore: 300000,
+    mine: 600000,
+    gamble: 30000,
+    heal: 120000,
+    beg: 60000
 }
 
 const lastUsed = new Map()
 
 export default {
     command: ['explore', 'mine', 'gamble', 'apostar', 'heal', 'curar', 'beg', 'mendigar'],
-    run: async (sock, m, { db, chat, command, senderNum, settings, args }) => {
-        // 1. Verificación de Registro interna
-        let user = db.prepare("SELECT * FROM users WHERE id = ?").get(senderNum)
-        
-        // Parche por si no existe la columna (evita errores)
-        try {
-            if (!user || user.registrado !== 1) {
-                return sock.sendMessage(chat, { 
-                    text: `❌ *¡ALTO!* No estás registrado en ${settings.brand}.\nUsa *.reg [nombre]* para empezar.` 
-                })
-            }
-        } catch (e) {
-            // Si la columna no existe, el bot intentará crearla (auto-fix)
-            db.prepare(`ALTER TABLE users ADD COLUMN registrado INTEGER DEFAULT 0`).run()
-            db.prepare(`ALTER TABLE users ADD COLUMN name TEXT DEFAULT 'User'`).run()
-            return sock.sendMessage(chat, { text: `⚠️ Sistema actualizado. Por favor, usa *.reg [nombre]* de nuevo.` })
+    run: async (sock, m, { db, chat, command, senderNum, settings, args, user, isOwner }) => {
+        if (!isOwner && user.registrado === 0) {
+            return sock.sendMessage(chat, { text: `❌ Regístrate en ${settings.brand} para usar este comando.\nUsa: *.reg Nombre.Edad*` })
         }
 
         const ahora = Date.now()
@@ -33,7 +20,6 @@ export default {
         const brand = settings.brand || 'Melp'
         const cmd = command === 'apostar' ? 'gamble' : (command === 'curar' ? 'heal' : (command === 'mendigar' ? 'beg' : command))
 
-        // 2. Gestión de Delays
         if (!lastUsed.has(senderNum)) lastUsed.set(senderNum, {})
         const userDelays = lastUsed.get(senderNum)
         
@@ -44,43 +30,45 @@ export default {
 
         let mensaje = ''
         let ganancia = 0
-        const luck = Math.random()
+        let saludUpdate = user.hp
 
         switch (cmd) {
             case 'explore':
                 ganancia = Math.floor(Math.random() * 1200) + 300
                 const sitios = [
-                    `Exploraste las alcantarillas de ${brand} y hallaste una bolsa con`,
-                    `Encontraste un cargamento abandonado en el puerto de ${brand} con`,
-                    `Un turista perdido en ${brand} Square te dio una propina de`,
-                    `Saqueaste un contenedor en la zona industrial de ${brand} y sacaste`
+                    `Exploraste las alcantarillas de ${brand} y hallaste`,
+                    `Encontraste un cargamento en el puerto de ${brand} con`,
+                    `Un turista en ${brand} Square te dio una propina de`,
+                    `Saqueaste un contenedor industrial en ${brand} y sacaste`
                 ]
                 mensaje = `🗺️ ${sitios[Math.floor(Math.random() * sitios.length)]} *${ganancia} ${moneda}*.`
                 break
 
             case 'mine':
                 ganancia = Math.floor(Math.random() * 2500) + 800
-                mensaje = `⛏️ *${brand} Mining:* Minaste datos encriptados de la red de ${brand} y obtuviste *${ganancia} ${moneda}*.`
+                mensaje = `⛏️ *${brand} Mining:* Minaste datos encriptados y obtuviste *${ganancia} ${moneda}*.`
                 break
 
             case 'beg':
                 ganancia = Math.floor(Math.random() * 200) + 50
-                mensaje = `🦴 *${brand} Beg:* Pediste limosna frente al ${brand} Bank y conseguiste *${ganancia} ${moneda}*.`
+                mensaje = `🦴 *${brand} Beg:* Pediste limosna en el centro de ${brand} y conseguiste *${ganancia} ${moneda}*.`
                 break
 
             case 'heal':
-                const costo = 500
-                if (user.coins < costo) return sock.sendMessage(chat, { text: `❌ No tienes ${costo} ${moneda} para pagar el hospital.` })
-                ganancia = -costo
-                mensaje = `💉 *${brand} Medical:* Te has curado de tus heridas. Pagaste *${costo} ${moneda}*.`
+                const costoFull = 2000
+                if (user.hp >= 100) return sock.sendMessage(chat, { text: `❤️ Ya tienes salud máxima (100 HP).` })
+                if (user.coins < costoFull) return sock.sendMessage(chat, { text: `❌ Necesitas *${costoFull} ${moneda}* para una recuperación total.` })
+                ganancia = -costoFull
+                saludUpdate = 100
+                mensaje = `💉 *${brand} Medical:* Hospitalización completa exitosa. ¡Tu HP está al 100%! Pagaste *${costoFull} ${moneda}*.`
                 break
 
             case 'gamble':
                 const apuesta = parseInt(args[0])
-                if (isNaN(apuesta) || apuesta < 100) return sock.sendMessage(chat, { text: `🎰 Uso: .apostar [mínimo 100]` })
-                if (user.coins < apuesta) return sock.sendMessage(chat, { text: `❌ No tienes suficiente saldo.` })
+                if (isNaN(apuesta) || apuesta < 100) return sock.sendMessage(chat, { text: `🎰 Uso: .apostar [cantidad]` })
+                if (user.coins < apuesta) return sock.sendMessage(chat, { text: `❌ Saldo insuficiente.` })
                 
-                if (luck > 0.55) {
+                if (Math.random() > 0.55) {
                     ganancia = apuesta
                     mensaje = `🎲 *${brand} Casino:* ¡Felicidades! Ganaste *${apuesta} ${moneda}*.`
                 } else {
@@ -91,8 +79,7 @@ export default {
         }
 
         userDelays[cmd] = ahora
-        db.prepare("UPDATE users SET coins = coins + ?, xp = xp + 15 WHERE id = ?").run(ganancia, senderNum)
+        db.prepare("UPDATE users SET coins = coins + ?, xp = xp + 15, hp = ? WHERE id = ?").run(ganancia, saludUpdate, senderNum)
         await sock.sendMessage(chat, { text: mensaje }, { quoted: m })
     }
-            }
-            
+}
